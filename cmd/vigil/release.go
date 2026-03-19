@@ -19,19 +19,29 @@ var releaseCmd = &cobra.Command{
 			return err
 		}
 
-		u, _ := user.Current()
+		u, err := user.Current()
+		if err != nil {
+			return fmt.Errorf("get current user: %v", err)
+		}
 		username := u.Username
 
-		st, _ := state.Load(cfg.State.Path)
-		prev, ok := st.Users[username]
-		if !ok || prev.Priority == "P0" || prev.Priority == "" {
+		var oldPriority string
+		err = state.LoadAndModify(cfg.State.Path, func(st *state.State) error {
+			prev, ok := st.Users[username]
+			if !ok || prev.Priority == "P0" || prev.Priority == "" {
+				return nil
+			}
+			oldPriority = prev.Priority
+			delete(st.Users, username)
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("update state: %v", err)
+		}
+		if oldPriority == "" {
 			fmt.Println("You are already at P0. Nothing to release.")
 			return nil
 		}
-
-		oldPriority := prev.Priority
-		delete(st.Users, username)
-		state.Save(cfg.State.Path, st)
 
 		n := &notifier.Notifier{LogPath: cfg.Notify.LogPath, Wall: false}
 		n.Log("release", username, fmt.Sprintf("manually released %s → P0", oldPriority))

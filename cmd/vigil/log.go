@@ -20,7 +20,10 @@ var logCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		u, _ := user.Current()
+		u, err := user.Current()
+		if err != nil {
+			return fmt.Errorf("get current user: %v", err)
+		}
 		logFile := filepath.Join(cfg.Notify.LogPath, "audit.log")
 		f, err := os.Open(logFile)
 		if err != nil {

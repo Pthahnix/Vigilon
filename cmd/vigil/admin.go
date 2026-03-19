@@ -78,13 +78,16 @@ var grantCmd = &cobra.Command{
 		}
 		expires := time.Now().Add(dur)
 
-		st, _ := state.Load(cfg.State.Path)
-		st.Users[user] = &state.UserState{
-			Priority: priority,
-			GPUs:     nil,
-			Expires:  &expires,
+		if err := state.LoadAndModify(cfg.State.Path, func(st *state.State) error {
+			st.Users[user] = &state.UserState{
+				Priority: priority,
+				GPUs:     nil,
+				Expires:  &expires,
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("save state: %v", err)
 		}
-		state.Save(cfg.State.Path, st)
 
 		n := &notifier.Notifier{LogPath: cfg.Notify.LogPath, Wall: false}
 		n.Log("admin-grant", user, fmt.Sprintf("priority=%s expires=%s", priority, expires.Format("2006-01-02 15:04")))
@@ -108,9 +111,12 @@ var resetCmd = &cobra.Command{
 		}
 
 		user := args[0]
-		st, _ := state.Load(cfg.State.Path)
-		delete(st.Users, user)
-		state.Save(cfg.State.Path, st)
+		if err := state.LoadAndModify(cfg.State.Path, func(st *state.State) error {
+			delete(st.Users, user)
+			return nil
+		}); err != nil {
+			return fmt.Errorf("save state: %v", err)
+		}
 
 		n := &notifier.Notifier{LogPath: cfg.Notify.LogPath, Wall: false}
 		n.Log("admin-reset", user, "reset to P0")
@@ -133,7 +139,9 @@ var purgeCmd = &cobra.Command{
 		}
 
 		st := &state.State{Users: make(map[string]*state.UserState)}
-		state.Save(cfg.State.Path, st)
+		if err := state.Save(cfg.State.Path, st); err != nil {
+			return fmt.Errorf("save state: %w", err)
+		}
 
 		n := &notifier.Notifier{LogPath: cfg.Notify.LogPath, Wall: false}
 		n.Log("admin-purge", "admin", "all users reset to P0")

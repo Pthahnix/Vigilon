@@ -37,7 +37,10 @@ var applyCmd = &cobra.Command{
 			return fmt.Errorf("AI review failed: %v", err)
 		}
 
-		u, _ := user.Current()
+		u, err := user.Current()
+		if err != nil {
+			return fmt.Errorf("get current user: %v", err)
+		}
 		username := u.Username
 
 		dur, err := time.ParseDuration(result.Duration)
@@ -48,18 +51,24 @@ var applyCmd = &cobra.Command{
 		dur = time.Duration(float64(dur) * 1.5)
 		expires := time.Now().Add(dur)
 
-		monitor.Init()
-		defer monitor.Shutdown()
+		if err := monitor.Init(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: GPU monitor init failed: %v (using fallback assignment)\n", err)
+		} else {
+			defer monitor.Shutdown()
+		}
 		tier := cfg.Priority[result.Priority]
 		gpus := assignGPUs(tier.MaxGPUs)
 
-		st, _ := state.Load(cfg.State.Path)
-		st.Users[username] = &state.UserState{
-			Priority: result.Priority,
-			GPUs:     gpus,
-			Expires:  &expires,
+		if err := state.LoadAndModify(cfg.State.Path, func(st *state.State) error {
+			st.Users[username] = &state.UserState{
+				Priority: result.Priority,
+				GPUs:     gpus,
+				Expires:  &expires,
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("save state: %v", err)
 		}
-		state.Save(cfg.State.Path, st)
 
 		n := &notifier.Notifier{LogPath: cfg.Notify.LogPath, Wall: false}
 		n.Log("grant", username, fmt.Sprintf("priority=%s gpus=%v expires=%s reason=%s",
@@ -83,7 +92,9 @@ var applyCmd = &cobra.Command{
 			time.Now().Format("2006-01-02 15:04"),
 			expires.Format("2006-01-02 15:04"),
 			result.Reason)
-		os.WriteFile(grantPath, []byte(grantContent), 0644)
+		if err := os.WriteFile(grantPath, []byte(grantContent), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not write grant file: %v\n", err)
+		}
 
 		return nil
 	},
