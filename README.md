@@ -8,6 +8,9 @@ AI-powered GPU watchdog for shared lab servers. Monitors usage, evaluates task p
 - 3-tier priority system: P0 (1 GPU), P1 (2 GPUs), P2 (3 GPUs)
 - AI-powered resource request review via `vigil apply`
 - Automatic violation detection with 30-minute grace period
+- Idle detection: auto-reclaim after 3 consecutive idle cycles
+- Timeout tolerance: expired but active tasks are not killed
+- Duration buffer: AI-estimated time × 1.5 for safety margin
 - Terminal warnings (`wall`) and audit logging
 
 ## Quick Start
@@ -22,9 +25,6 @@ sudo ./scripts/install.sh
 # Edit config
 sudo vim /etc/vigilon/config.yaml
 
-# Start daemon
-sudo systemctl enable --now vigilon
-
 # Apply for GPU priority upgrade
 vigil apply my-request.md
 
@@ -33,6 +33,22 @@ vigil status
 
 # View your history
 vigil log
+
+# Release priority when done
+vigil release
+```
+
+## Admin Commands
+
+All admin commands require passphrase authentication.
+
+```bash
+vigil admin start          # Start daemon
+vigil admin stop           # Stop daemon
+vigil admin grant <user> <P0|P1|P2> [duration]  # Manual priority set
+vigil admin reset <user>   # Reset user to P0
+vigil admin purge          # Reset all users to P0
+vigil admin check          # Run one detection cycle now
 ```
 
 ## Priority Levels
