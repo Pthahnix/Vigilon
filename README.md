@@ -43,13 +43,6 @@ vigil log
 | P1 | Boost | 2 | Project sprints, model training |
 | P2 | Urgent | 3 (all) | Paper deadlines, urgent experiments |
 
-## Tech Stack
-
-- Go 1.22+
-- NVIDIA NVML (go-nvml)
-- Cobra (CLI)
-- Anthropic Claude API (AI review)
-
 ## License
 
 See [LICENSE](LICENSE).
