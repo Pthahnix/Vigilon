@@ -1,7 +1,9 @@
 package state
 
 import (
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -41,3 +43,38 @@ func TestLoadMissing(t *testing.T) {
 }
 
 func timePtr(t time.Time) *time.Time { return &t }
+
+func TestConcurrentLoadAndModify(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	const n = 10
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		user := fmt.Sprintf("user%d", i)
+		go func(u string) {
+			defer wg.Done()
+			err := LoadAndModify(path, func(s *State) error {
+				s.Users[u] = &UserState{Priority: "P1"}
+				return nil
+			})
+			if err != nil {
+				t.Errorf("LoadAndModify(%s): %v", u, err)
+			}
+		}(user)
+	}
+	wg.Wait()
+
+	s, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load after concurrent writes: %v", err)
+	}
+	if len(s.Users) != n {
+		t.Errorf("expected %d users, got %d", n, len(s.Users))
+	}
+	for i := 0; i < n; i++ {
+		user := fmt.Sprintf("user%d", i)
+		if _, ok := s.Users[user]; !ok {
+			t.Errorf("missing user %s", user)
+		}
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"syscall"
 	"time"
 )
 
@@ -19,30 +20,86 @@ type UserState struct {
 	IdleCount int        `json:"idle_count"` // consecutive idle detection cycles
 }
 
-func Load(path string) (*State, error) {
-	data, err := os.ReadFile(path)
+func withLock(statePath string, fn func() error) error {
+	lockPath := statePath + ".lock"
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return &State{Users: make(map[string]*UserState)}, nil
-		}
-		return nil, fmt.Errorf("read state: %w", err)
+		return fmt.Errorf("open lock file: %w", err)
 	}
-	var s State
-	if err := json.Unmarshal(data, &s); err != nil {
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("acquire lock: %w", err)
+	}
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	return fn()
+}
+
+func Load(path string) (*State, error) {
+	// Fast path: if the state file doesn't exist we can return the default
+	// without acquiring a lock (the lock file's parent dir may not exist either).
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return &State{Users: make(map[string]*UserState)}, nil
 	}
-	if s.Users == nil {
-		s.Users = make(map[string]*UserState)
-	}
-	return &s, nil
+	var result *State
+	err := withLock(path, func() error {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				result = &State{Users: make(map[string]*UserState)}
+				return nil
+			}
+			return fmt.Errorf("read state: %w", err)
+		}
+		var s State
+		if err := json.Unmarshal(data, &s); err != nil {
+			result = &State{Users: make(map[string]*UserState)}
+			return nil
+		}
+		if s.Users == nil {
+			s.Users = make(map[string]*UserState)
+		}
+		result = &s
+		return nil
+	})
+	return result, err
 }
 
 func Save(path string, s *State) error {
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal state: %w", err)
-	}
-	return os.WriteFile(path, data, 0644)
+	return withLock(path, func() error {
+		data, err := json.MarshalIndent(s, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal state: %w", err)
+		}
+		return os.WriteFile(path, data, 0644)
+	})
+}
+
+func LoadAndModify(path string, fn func(s *State) error) error {
+	return withLock(path, func() error {
+		data, err := os.ReadFile(path)
+		var s State
+		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("read state: %w", err)
+			}
+			s = State{Users: make(map[string]*UserState)}
+		} else {
+			if err := json.Unmarshal(data, &s); err != nil {
+				s = State{Users: make(map[string]*UserState)}
+			}
+			if s.Users == nil {
+				s.Users = make(map[string]*UserState)
+			}
+		}
+		if err := fn(&s); err != nil {
+			return err
+		}
+		out, err := json.MarshalIndent(&s, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal state: %w", err)
+		}
+		return os.WriteFile(path, out, 0644)
+	})
 }
 
 func (s *State) GetPriority(user string) string {
