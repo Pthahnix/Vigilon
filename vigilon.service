@@ -7,6 +7,16 @@ Type=simple
 ExecStart=/usr/local/bin/vigil daemon --config /etc/vigilon/config.yaml
 Restart=on-failure
 RestartSec=10
+User=root
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vigilon
+
+# Security hardening
+ProtectHome=read-only
+ProtectSystem=full
+NoNewPrivileges=yes
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
