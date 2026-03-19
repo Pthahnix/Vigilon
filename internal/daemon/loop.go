@@ -54,14 +54,14 @@ func (d *Daemon) Run() error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	d.cycle()
+	d.Cycle()
 	for range ticker.C {
-		d.cycle()
+		d.Cycle()
 	}
 	return nil
 }
 
-func (d *Daemon) cycle() {
+func (d *Daemon) Cycle() {
 	st, err := state.Load(d.Config.State.Path)
 	if err != nil {
 		log.Printf("reload state: %v", err)

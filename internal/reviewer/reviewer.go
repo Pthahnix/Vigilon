@@ -38,7 +38,7 @@ Priority levels:
 Respond in JSON only:
 {"priority": "P0|P1|P2", "duration": "Nh (hours)", "reason": "brief explanation"}`
 
-func loadEnvFile(path string) {
+func LoadEnvFile(path string) {
 	f, err := os.Open(path)
 	if err != nil {
 		return
@@ -65,7 +65,7 @@ func loadEnvFile(path string) {
 
 func (r *Reviewer) Review(application string) (*ReviewResult, error) {
 	if r.Config.EnvFile != "" {
-		loadEnvFile(r.Config.EnvFile)
+		LoadEnvFile(r.Config.EnvFile)
 	}
 
 	apiKey := os.Getenv(r.Config.APIKeyEnv)
