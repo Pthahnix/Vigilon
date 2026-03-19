@@ -43,3 +43,49 @@ state:
 		t.Errorf("expected P2 max_gpus=3, got %d", cfg.Priority["P2"].MaxGPUs)
 	}
 }
+
+func TestValidate_MissingStatePath(t *testing.T) {
+	cfg := &Config{Notify: NotifyConfig{LogPath: "/tmp"}, Daemon: DaemonConfig{IdleThreshold: 3, DurationBuffer: 1.5}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for missing state.path")
+	}
+}
+
+func TestValidate_InvalidDuration(t *testing.T) {
+	cfg := &Config{
+		State:  StateConfig{Path: "/tmp/state.json"},
+		Notify: NotifyConfig{LogPath: "/tmp"},
+		Daemon: DaemonConfig{CheckInterval: "not-a-duration", IdleThreshold: 3, DurationBuffer: 1.5},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for invalid check_interval")
+	}
+}
+
+func TestValidate_InvalidMaxGPUs(t *testing.T) {
+	cfg := &Config{
+		State:    StateConfig{Path: "/tmp/state.json"},
+		Notify:   NotifyConfig{LogPath: "/tmp"},
+		Daemon:   DaemonConfig{IdleThreshold: 3, DurationBuffer: 1.5},
+		Priority: map[string]PriorityTier{"P0": {MaxGPUs: 0}},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for max_gpus <= 0")
+	}
+}
+
+func TestLoad_AppliesDefaults(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "config.yaml")
+	os.WriteFile(tmp, []byte("state:\n  path: /tmp/s.json\nnotify:\n  log_path: /tmp\n"), 0644)
+	cfg, err := Load(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Daemon.IdleThreshold != 3 {
+		t.Errorf("expected idle_threshold=3, got %d", cfg.Daemon.IdleThreshold)
+	}
+	if cfg.Daemon.DurationBuffer != 1.5 {
+		t.Errorf("expected duration_buffer=1.5, got %f", cfg.Daemon.DurationBuffer)
+	}
+}
+

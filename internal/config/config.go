@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -23,8 +24,10 @@ type LLMConfig struct {
 }
 
 type DaemonConfig struct {
-	CheckInterval string `yaml:"check_interval"`
-	GracePeriod   string `yaml:"grace_period"`
+	CheckInterval  string  `yaml:"check_interval"`
+	GracePeriod    string  `yaml:"grace_period"`
+	IdleThreshold  int     `yaml:"idle_threshold"`
+	DurationBuffer float64 `yaml:"duration_buffer"`
 }
 
 type PriorityTier struct {
@@ -49,5 +52,45 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	if cfg.Daemon.IdleThreshold <= 0 {
+		cfg.Daemon.IdleThreshold = 3
+	}
+	if cfg.Daemon.DurationBuffer <= 0 {
+		cfg.Daemon.DurationBuffer = 1.5
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
 	return &cfg, nil
+}
+
+func (c *Config) Validate() error {
+	if c.State.Path == "" {
+		return fmt.Errorf("state.path is required")
+	}
+	if c.Notify.LogPath == "" {
+		return fmt.Errorf("notify.log_path is required")
+	}
+	if c.Daemon.CheckInterval != "" {
+		if _, err := time.ParseDuration(c.Daemon.CheckInterval); err != nil {
+			return fmt.Errorf("invalid daemon.check_interval: %w", err)
+		}
+	}
+	if c.Daemon.GracePeriod != "" {
+		if _, err := time.ParseDuration(c.Daemon.GracePeriod); err != nil {
+			return fmt.Errorf("invalid daemon.grace_period: %w", err)
+		}
+	}
+	if c.Daemon.IdleThreshold < 0 {
+		return fmt.Errorf("daemon.idle_threshold must be >= 0")
+	}
+	if c.Daemon.DurationBuffer < 0 {
+		return fmt.Errorf("daemon.duration_buffer must be >= 0")
+	}
+	for name, tier := range c.Priority {
+		if tier.MaxGPUs <= 0 {
+			return fmt.Errorf("priority.%s.max_gpus must be > 0", name)
+		}
+	}
+	return nil
 }

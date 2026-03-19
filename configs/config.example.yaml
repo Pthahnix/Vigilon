@@ -7,6 +7,8 @@ llm:
 daemon:
   check_interval: "10m"
   grace_period: "30m"
+  idle_threshold: 3          # consecutive idle cycles before auto-reclaim
+  duration_buffer: 1.5       # multiplier on AI-estimated duration
 
 priority:
   P0:

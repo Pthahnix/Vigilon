@@ -136,7 +136,7 @@ func (e *Enforcer) Enforce(v Violation) {
 }
 
 // CheckIdle detects users with elevated priority but no GPU activity.
-// - 3 consecutive idle cycles → auto-downgrade to P0
+// - consecutive idle cycles >= idle_threshold → auto-downgrade to P0
 // - Expired but still actively using GPU → tolerate, don't kill
 func (e *Enforcer) CheckIdle(statePath string) {
 	userGPUs, err := monitor.UserGPUMap()
@@ -144,37 +144,34 @@ func (e *Enforcer) CheckIdle(statePath string) {
 		return
 	}
 
-	for user, u := range e.State.Users {
-		if u.Priority == "P0" || u.Priority == "" {
-			continue
-		}
+	state.LoadAndModify(statePath, func(st *state.State) error {
+		for user, u := range st.Users {
+			if u.Priority == "P0" || u.Priority == "" {
+				continue
+			}
 
-		_, hasGPU := userGPUs[user]
-		expired := u.Expires != nil && time.Now().After(*u.Expires)
+			_, hasGPU := userGPUs[user]
+			expired := u.Expires != nil && time.Now().After(*u.Expires)
 
-		if !hasGPU {
-			// User has elevated priority but no GPU processes
-			u.IdleCount++
-			if u.IdleCount >= 3 {
-				// 3 consecutive idle checks → auto-reclaim
-				e.Notifier.Log("auto-reclaim", user,
-					fmt.Sprintf("idle for %d cycles, downgraded from %s to P0", u.IdleCount, u.Priority))
-				u.Priority = "P0"
-				u.GPUs = nil
-				u.Expires = nil
+			if !hasGPU {
+				u.IdleCount++
+				if u.IdleCount >= e.Config.Daemon.IdleThreshold {
+					e.Notifier.Log("auto-reclaim", user,
+						fmt.Sprintf("idle for %d cycles, downgraded from %s to P0", u.IdleCount, u.Priority))
+					u.Priority = "P0"
+					u.GPUs = nil
+					u.Expires = nil
+					u.IdleCount = 0
+				}
+			} else {
 				u.IdleCount = 0
-			}
-		} else {
-			// User is actively using GPU
-			u.IdleCount = 0
-			if expired {
-				// Expired but still running → tolerate, just log
-				e.Notifier.Log("overtime-tolerate", user,
-					fmt.Sprintf("expired but GPU still active, tolerating %s", u.Priority))
+				if expired {
+					e.Notifier.Log("overtime-tolerate", user,
+						fmt.Sprintf("expired but GPU still active, tolerating %s", u.Priority))
+				}
 			}
 		}
-	}
-
-	// Save updated idle counts
-	state.Save(statePath, e.State)
+		e.State = st
+		return nil
+	})
 }
