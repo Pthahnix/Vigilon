@@ -96,9 +96,15 @@ func (r *Reviewer) callOpenAICompat(baseURL, apiKey, model, application string) 
 		},
 		"max_tokens": 256,
 	}
-	data, _ := json.Marshal(body)
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
 
-	req, _ := http.NewRequest("POST", endpoint, bytes.NewReader(data))
+	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -108,7 +114,10 @@ func (r *Reviewer) callOpenAICompat(baseURL, apiKey, model, application string) 
 	}
 	defer resp.Body.Close()
 
-	respData, _ := io.ReadAll(resp.Body)
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("api error %d: %s", resp.StatusCode, respData)
 	}
@@ -120,7 +129,9 @@ func (r *Reviewer) callOpenAICompat(baseURL, apiKey, model, application string) 
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	json.Unmarshal(respData, &apiResp)
+	if err := json.Unmarshal(respData, &apiResp); err != nil {
+		return nil, fmt.Errorf("parse api response: %w", err)
+	}
 	if len(apiResp.Choices) == 0 {
 		return nil, fmt.Errorf("empty response")
 	}
