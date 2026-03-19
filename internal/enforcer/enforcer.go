@@ -105,7 +105,29 @@ func (e *Enforcer) Enforce(v Violation) {
 		if err != nil {
 			continue
 		}
-		proc.Signal(syscall.SIGTERM)
+		// Check if process is still alive first
+		if err := proc.Signal(syscall.Signal(0)); err != nil {
+			continue // already dead
+		}
+		// Send SIGTERM
+		if err := proc.Signal(syscall.SIGTERM); err != nil {
+			e.Notifier.Log("kill-error", v.User, fmt.Sprintf("SIGTERM PID %d failed: %v", pid, err))
+			continue
+		}
+		// Wait up to 5 seconds for graceful exit
+		dead := false
+		for i := 0; i < 5; i++ {
+			time.Sleep(1 * time.Second)
+			if err := proc.Signal(syscall.Signal(0)); err != nil {
+				dead = true
+				break
+			}
+		}
+		if !dead {
+			// Force kill
+			proc.Signal(syscall.SIGKILL)
+			e.Notifier.Log("kill-force", v.User, fmt.Sprintf("SIGKILL PID %d (ignored SIGTERM)", pid))
+		}
 		msg := fmt.Sprintf("Killed PID %d (exceeded %s limit: %d/%d GPUs)",
 			pid, v.Priority, v.Actual, v.Allowed)
 		e.Notifier.Kill(v.User, msg)
