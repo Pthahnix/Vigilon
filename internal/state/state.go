@@ -13,9 +13,10 @@ type State struct {
 }
 
 type UserState struct {
-	Priority string     `json:"priority"`
-	GPUs     []int      `json:"gpus"`
-	Expires  *time.Time `json:"expires"`
+	Priority  string     `json:"priority"`
+	GPUs      []int      `json:"gpus"`
+	Expires   *time.Time `json:"expires"`
+	IdleCount int        `json:"idle_count"` // consecutive idle detection cycles
 }
 
 func Load(path string) (*State, error) {

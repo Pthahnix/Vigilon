@@ -112,3 +112,47 @@ func (e *Enforcer) Enforce(v Violation) {
 	}
 	delete(e.Grace, v.User)
 }
+
+// CheckIdle detects users with elevated priority but no GPU activity.
+// - 3 consecutive idle cycles → auto-downgrade to P0
+// - Expired but still actively using GPU → tolerate, don't kill
+func (e *Enforcer) CheckIdle(statePath string) {
+	userGPUs, err := monitor.UserGPUMap()
+	if err != nil {
+		return
+	}
+
+	for user, u := range e.State.Users {
+		if u.Priority == "P0" || u.Priority == "" {
+			continue
+		}
+
+		_, hasGPU := userGPUs[user]
+		expired := u.Expires != nil && time.Now().After(*u.Expires)
+
+		if !hasGPU {
+			// User has elevated priority but no GPU processes
+			u.IdleCount++
+			if u.IdleCount >= 3 {
+				// 3 consecutive idle checks → auto-reclaim
+				e.Notifier.Log("auto-reclaim", user,
+					fmt.Sprintf("idle for %d cycles, downgraded from %s to P0", u.IdleCount, u.Priority))
+				u.Priority = "P0"
+				u.GPUs = nil
+				u.Expires = nil
+				u.IdleCount = 0
+			}
+		} else {
+			// User is actively using GPU
+			u.IdleCount = 0
+			if expired {
+				// Expired but still running → tolerate, just log
+				e.Notifier.Log("overtime-tolerate", user,
+					fmt.Sprintf("expired but GPU still active, tolerating %s", u.Priority))
+			}
+		}
+	}
+
+	// Save updated idle counts
+	state.Save(statePath, e.State)
+}

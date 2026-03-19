@@ -78,4 +78,7 @@ func (d *Daemon) Cycle() {
 	for _, v := range violations {
 		d.Enforcer.Enforce(v)
 	}
+
+	// Check for idle users with elevated priority
+	d.Enforcer.CheckIdle(d.Config.State.Path)
 }

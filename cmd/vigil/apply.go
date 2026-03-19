@@ -44,6 +44,8 @@ var applyCmd = &cobra.Command{
 		if err != nil {
 			dur = 24 * time.Hour
 		}
+		// Apply 1.5x buffer to estimated duration
+		dur = time.Duration(float64(dur) * 1.5)
 		expires := time.Now().Add(dur)
 
 		monitor.Init()
