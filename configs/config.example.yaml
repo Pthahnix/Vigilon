@@ -1,0 +1,24 @@
+llm:
+  base_url_env: "BASE_URL"       # OpenAI-compatible endpoint
+  api_key_env: "API_KEY"
+  model_env: "MODEL_NAME"
+  env_file: ".env"               # path to .env file (relative to binary or absolute)
+
+daemon:
+  check_interval: "10m"
+  grace_period: "30m"
+
+priority:
+  P0:
+    max_gpus: 1
+  P1:
+    max_gpus: 2
+  P2:
+    max_gpus: 3
+
+notify:
+  wall: true
+  log_path: "/var/log/vigilon/"
+
+state:
+  path: "/etc/vigilon/state.json"

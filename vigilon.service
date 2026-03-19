@@ -1,0 +1,12 @@
+[Unit]
+Description=Vigilon GPU Watchdog
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vigil daemon --config /etc/vigilon/config.yaml
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
